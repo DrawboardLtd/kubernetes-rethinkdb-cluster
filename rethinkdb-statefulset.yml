@@ -1,10 +1,14 @@
-apiVersion: apps/v1beta1
+apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   labels:
     db: rethinkdb
   name: rethinkdb
 spec:
+  selector:
+    matchLabels:
+      db: rethinkdb
+      role: replica
   replicas: 3
   # Must match RETHINKDB-CLUSTER env and service name.
   serviceName: rethinkdb
@@ -15,11 +19,11 @@ spec:
         role: replica
     spec:
       containers:
-      - image: rosskukulinski/rethinkdb-kubernetes:2.3.5
+      - image: drawboardus.azurecr.io/rethinkdb:2.4
         args:
           - "--cache-size"
-          - "100"
-        imagePullPolicy: Always
+          - "1024"
+        imagePullPolicy: IfNotPresent
         name: rethinkdb
         env:
         - name: POD_NAMESPACE
@@ -48,11 +52,11 @@ spec:
           name: cluster
         resources:
           limits:
-            cpu: 100m
-            memory: 256Mi
+            cpu: 500m
+            memory: 1.5Gi
           requests:
             cpu: 100m
-            memory: 256Mi
+            memory: 1Gi
         volumeMounts:
         - mountPath: /data
           name: data
@@ -76,6 +80,8 @@ spec:
           timeoutSeconds: 5
       dnsPolicy: ClusterFirst
       restartPolicy: Always
+      imagePullSecrets:
+      - name: docker-registry
   volumeClaimTemplates:
   - metadata:
       name: data

@@ -1,91 +1,71 @@
-# RethinkDB Cluster for Kubernetes
+This fork...
+============
+This is fork of rosskukulinski's great work. This fork removed any non stateful set options, made the admin pod launch with the service account defined in the rbac yaml as it need it to hit the kubernetes API. The admin service is not a load balancer now and is just a cluster ip service. Its exposed via an ingress. The ingress is using cert manager to provide tls and does some basic auth.
 
-MIT Licensed by Ross Kukulinski [@RossKukulinski](https://twitter.com/rosskukulinski)
+Cert manager/issuer/custom ingress class/etc stuff is not part of this repo. Ingress file will need a few changes (like using your own domain).
 
-Docker image can be found [here](https://github.com/rosskukulinski/rethinkdb-kubernetes).
+I have a fork of the original docker image as well. It does absolutely nothing except bump up the rethinkdb version to 2.4. 
 
-## Overview
+https://github.com/worldspawn/rethinkdb-kubernetes
 
-This repository contains Kubernetes configurations to easily deploy RethinkDB.
-The quickstart provides a non-persistent disk configuration for development
-and testing.  There is also a GKE / GCE configuration which supports
-persistent volume backed replicas.
+Build it and push to docker hub or your own repository.
 
-By default, all RethinkDB Replicas are configured with Resource Limits and Requests for:
+All the pulls reference a docker image secret, remove that for docker hub.
 
-* 256Mi memory
-* 100m cpu
+Rethinkdb StatefulSet
+=====================
 
-In addition, RethinkDB Replicas are configured with a 100Mi cache-size.  All
-of these settings can be tuned for your specific needs.
+This directory contains a [StatefulSet](https://kubernetes.io/docs/concepts/abstractions/controllers/statefulsets/). 
+Note: StatefulSets are a beta feature in 1.5
 
-## Background
-This is based on the original work in [github.com/kubernetes/kubernetes](https://github.com/kubernetes/kubernetes/tree/master/examples/rethinkdb), but has been adapted to utilize newer versions of RethinkDB (2.3+) as well as supporting proxies.
+GKE Instructions
+================
+// TODO
 
-It's important to note that the default admin interface IS exposed via public LoadBalancer.  This is for demonstration purposes only.  I would recommend changing the admin service to ```type: ClusterIP``` and use a TLS & password protected proxy (like nginx) to publicly expose the admin interface.
+AWS Instructions
+================
+It appears that the PersistentVolumeClaims create the EBS automatically.
 
-## New to Kubernetes?
-1. Create a project on https://console.cloud.google.com
-2. Set `gcloud` to your project `gcloud config set <project-name>`
-3. Create a cluster via the Console: Compute > Container Engine > Container Clusters > New container cluster. 
-Leaving all other options default - You should get a Kubernetes cluster with three nodes, ready to receive your container image.
-4. Set `gcloud` to point to your container - `gcloud container clusters get-credentials --zone <cluster-zone> <cluster-name>`
+```bash
+# Start the service. 
+╰─$ kubectl create -f rethinkdb-service.yml 
+service "rethinkdb" created
 
+# Create the StatefulSet
+╰─$ kubectl create -f rethinkdb-statefulset.yml 
+statefulset "rethinkdb" created
 
+# Start up an admin server and service.
+╰─$ kubectl create -f rethinkdb-admin.yml 
+service "rethinkdb-admin" created
+deployment "rethinkdb-admin" created
 
-## Quickstart without persistent storage
+# Poke around to verify...
+╰─$ kubectl get pv
+NAME                                       CAPACITY   ACCESSMODES   RECLAIMPOLICY   STATUS    CLAIM                      REASON    AGE
+pvc-a3a8ebf7-df4e-11e6-ac2e-02b95063087e   10Gi       RWO           Delete          Bound     default/data-rethinkdb-0             5m
+pvc-a3b11fc6-df4e-11e6-ac2e-02b95063087e   10Gi       RWO           Delete          Bound     default/data-rethinkdb-1             5m
+pvc-a3b6feea-df4e-11e6-ac2e-02b95063087e   10Gi       RWO           Delete          Bound     default/data-rethinkdb-2             5m
+╭
+╰─$ kubectl get statefulset,po,svc
+NAME                     DESIRED   CURRENT   AGE
+statefulsets/rethinkdb   3         3         5m
 
-Launch Services and Deployments
+NAME                                  READY     STATUS    RESTARTS   AGE
+po/rethinkdb-0                        1/1       Running   0          5m
+po/rethinkdb-1                        1/1       Running   0          4m
+po/rethinkdb-2                        1/1       Running   0          4m
+po/rethinkdb-admin-1722877930-wr6km   1/1       Running   3          5m
 
-```
-kubectl apply -f rethinkdb-rbac.yaml
-kubectl apply -f rethinkdb-quickstart.yml
-```
-
-Once Rethinkdb pods are running, access the Admin service
-
-```
-kubectl describe service rethinkdb-admin
-```
-
-To find the external IP to connect to, locate at the `EXTERNAL-IP` column under the `rethinkdb-driver` row after running
-```
-kubectl get service
-```
-
-Scale up the number of Rethinkdb replicas
-
-```
-kubectl scale deployment/rethinkdb-replica --replicas=5
-```
-
-Observe your pods
-
-```
-kubectl get pods
+NAME                  CLUSTER-IP    EXTERNAL-IP        PORT(S)          AGE
+svc/rethinkdb         None          <none>             29015/TCP        5m
+svc/rethinkdb-admin   10.0.147.93   aa386db9cdf4e...   8080:30993/TCP   5m
+╭
 ```
 
-## GKE/GCE Configuration with persistent storage (recommended)
+Warning! 
+The admin service is type LoadBalancer so it will create an ELB for you. The admin service is NOT secured.
 
-Due to the way persistent volumes are handled in Kubernetes, we have to have one RC per replica, each with its own persistent volume.  The RC is used to create a new pod should there be any issues.
+Find the ELB in the AWS console and visit port :8080. You should see three servers in the servers tab.
 
-This assumes you have created three persistent volumes in GKE:
-rethinkdb-storage-1
-rethinkdb-storage-2
-rethinkdb-storage-3
-
-
-Create the RethinkDB Services and first replica
-
-```
-kubectl create -f rethinkdb-services.yml
-kubectl create -f rethinkdb-replica.1.yml
-```
-Wait for first replica to come up before launching the other replicas
-
-```
-kubectl create -f rethinkdb-replica.2.yml
-kubectl create -f rethinkdb-replica.3.yml
-kubectl create -f rethinkdb-proxy.yml
-kubectl create -f rethinkdb-admin.yml
-```
+![alt text](dash.png "Example Dashboard")

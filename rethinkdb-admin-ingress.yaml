@@ -1,0 +1,22 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: rethinkdb-admin
+  annotations:
+    cert-manager.io/issuer: letsencrypt-staging
+    kubernetes.io/ingress.class: us-dev
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/auth-url: https://httpbin.org/basic-auth/username/password
+spec:
+  tls:
+    - hosts:
+        - rtadmin.example.com
+      secretName: rtadmin-example-com
+  rules:
+    - host: rtadmin.example.com
+      http:
+        paths:
+          - path: /(.*)
+            backend:
+              serviceName: rethinkdb-admin
+              servicePort: 8080
